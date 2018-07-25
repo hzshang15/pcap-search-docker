@@ -125,6 +125,9 @@ def out_begin_pythonsimple(*args):
     print >>_out_file, r"""
 import os, sys, string, random
 from pwn import *
+
+DO_RECV, DO_SEND = 0, 1
+
 try:
     from termcolor import colored
 except:
@@ -148,7 +151,7 @@ except:
         return text
 """
     print >>_out_file, 'seq = []'
-    print >>_out_file, '# 1 for client, 0 for server'
+    print >>_out_file, '# 1 for SEND, 0 for RECV'
 
 
 def out_end_pythonsimple(*args):
@@ -156,12 +159,13 @@ def out_end_pythonsimple(*args):
     print >>_out_file, r"""
 def attack(host, port):
     r = remote(host, port, timeout=40)
-    for c, s in seq:
-        if c == 0:
+    for action, s in seq:
+        if action == DO_RECV:
             data = r.recvrepeat(1)
-            print("\033[33m{}\033[0m").format(repr(data))
-        else:
-            print("\033[36m{}\033[0m").format(repr(s))
+            #data = r.recvuntil(s)
+            print("RECV: \033[33m{}\033[0m").format(repr(data))
+        elif action == DO_SEND:
+            print("SEND: \033[36m{}\033[0m").format(repr(s))
             r.send(s)
     #r.interactive()
     return r.recvall()
@@ -227,6 +231,10 @@ except:
 
         text += RESET
         return text
+
+def print_send_data(data):
+    print("SEND: \033[36m{}\033[0m").format(repr(data))
+
 """
     print >>_out_file, 'print "Usage: %s <host> <port> [idr]\\n\\ti: interact at end\\n\\td: diff response and expected response" % (sys.argv[0])'
     print >>_out_file, 'def diffstr(content, expected):'
@@ -237,9 +245,9 @@ except:
     print >>_out_file, '            text = repr(i[-1])[1:-1]'
     print >>_out_file, '            if i[0] == " ":'
     print >>_out_file, '                sys.stdout.write(text)'
-    print >>_out_file, '            if i[0] == "+":'
+    print >>_out_file, '            if i[0] == "+": # red means "I shoudn\'t recv these bytes"'
     print >>_out_file, '                sys.stdout.write(colored(text, on_color="on_red"))'
-    print >>_out_file, '            if i[0] == "-":'
+    print >>_out_file, '            if i[0] == "-": # blue means "I expect to recv these bytes, but I didn\'t see them"'
     print >>_out_file, '                sys.stdout.write(colored(text, on_color="on_blue"))'
     print >>_out_file, '        sys.stdout.write("\\n")'
     print >>_out_file, '        sys.stdout.flush()'
@@ -258,9 +266,10 @@ def out_end_pythondiff(*args):
 
 def out_pythondiff(srcip, srcport, destip, dstport, data, direction, ff):
     if direction == 'cs':
-        print >>_out_file, 'print("\\033[36m{}\\033[0m")'.format(repr(data))
+        print >>_out_file, 'print_send_data({})'.format(repr(data))
         print >>_out_file, 'r.send({})'.format((repr(data)))
     else:
+        print >>_out_file, 'sys.stdout.write("RECV: ")'
         print >>_out_file, '__content = r.recvrepeat(timeout = timeout)'
         print >>_out_file, '__expected =  {}'.format(repr(data))
         print >>_out_file, 'diffstr(__content, __expected)'
